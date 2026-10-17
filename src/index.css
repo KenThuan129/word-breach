@@ -1,0 +1,437 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #F5EFE6;
+    color: #1A2A3A;
+    font-family: 'Fredoka', 'Quicksand', -apple-system, BlinkMacSystemFont, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+}
+
+/* Cozy TOEM Paper Craft Background Texture */
+.bg-paper-texture {
+  background-color: #F5EFE6;
+  background-image: 
+    radial-gradient(#8B6F5C12 1.5px, transparent 1.5px),
+    radial-gradient(#8B6F5C08 1.5px, #F5EFE6 1.5px);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+}
+
+/* Square Board Tray Styling */
+.wood-board-tray {
+  background: #E8DDCA;
+  border: 4px solid #8B6F5C;
+  border-radius: 28px;
+  box-shadow: 
+    inset 0 4px 8px rgba(139, 111, 92, 0.25),
+    0 12px 32px rgba(74, 53, 39, 0.18),
+    0 4px 12px rgba(74, 53, 39, 0.1);
+  position: relative;
+}
+
+/* Letter Style for Square Tiles */
+.wordplay-letter-square {
+  font-family: 'Fredoka', 'Baloo 2', sans-serif;
+  font-weight: 800;
+  color: #1A2A3A;
+  letter-spacing: -0.03em;
+  text-shadow: 
+    0 1.5px 0 #FFFFFF,
+    0 -1px 0 #FFFFFF,
+    1px 0 0 #FFFFFF,
+    -1px 0 0 #FFFFFF,
+    0 2px 4px rgba(74, 53, 39, 0.14);
+}
+
+/* Square 3D Tile Rendering System (Kept intact) */
+.tile-3d-square {
+  background: #FFFDF9;
+  border-radius: 12px;
+  border-top: 2px solid rgba(255, 255, 255, 0.95);
+  border-left: 2px solid rgba(255, 255, 255, 0.85);
+  border-right: 2px solid #E2D5C3;
+  border-bottom: 2px solid #D5C5B0;
+  box-shadow: 
+    0 5px 0 #BCA892,
+    0 7px 10px rgba(92, 70, 52, 0.18);
+  transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.4, 1), 
+              box-shadow 0.12s ease, 
+              background-color 0.15s ease,
+              border-color 0.15s ease;
+  will-change: transform, box-shadow;
+}
+
+.tile-3d-square:hover:not(.is-selected):not(.is-dragging) {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 7px 0 #BCA892,
+    0 10px 14px rgba(92, 70, 52, 0.22);
+}
+
+.tile-3d-square.is-selected {
+  background: linear-gradient(145deg, #FDF0D5 0%, #F4D58D 60%, #E89B7B 100%) !important;
+  border-top: 2px solid #FFF8EC !important;
+  border-left: 2px solid #FFE4A0 !important;
+  border-right: 2px solid #D97706 !important;
+  border-bottom: 2px solid #C26322 !important;
+  color: #1A2A3A !important;
+  transform: translateY(-6px) scale(1.06) !important;
+  box-shadow: 
+    0 9px 0 #9E4B16,
+    0 14px 20px rgba(158, 75, 22, 0.35),
+    0 0 16px rgba(244, 213, 141, 0.7) !important;
+  z-index: 20;
+}
+
+.tile-3d-square.is-invalid {
+  animation: tileShakeAnim 0.35s ease-in-out forwards !important;
+  background: #FEE2E2 !important;
+  border-color: #F87171 !important;
+  box-shadow: 0 4px 0 #DC2626, 0 6px 12px rgba(220, 38, 38, 0.3) !important;
+}
+
+.tile-3d-square.is-clearing {
+  animation: tileClearAnim 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  z-index: 30;
+}
+
+.tile-3d-square.is-spawning {
+  animation: tileSpawnAnim 420ms cubic-bezier(0.22, 1.2, 0.36, 1) forwards;
+  animation-delay: var(--spawn-delay, 0ms);
+}
+
+/* === REDESIGN: Hex Mosaic Style === */
+.mosaic-hex-tile {
+  position: absolute;
+  user-select: none;
+  touch-action: none;
+  cursor: pointer;
+  transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.4, 1), filter 0.15s ease;
+  will-change: transform;
+}
+
+.mosaic-hex-tile:hover:not(.is-selected):not(.is-clearing) {
+  transform: scale(1.03);
+  z-index: 26;
+  filter: drop-shadow(0 3px 6px rgba(74, 53, 39, 0.2));
+}
+
+.mosaic-hex-tile.is-selected {
+  transform: scale(1.06);
+  z-index: 30;
+  filter: drop-shadow(0 4px 10px rgba(217, 119, 6, 0.45));
+}
+
+.mosaic-hex-tile.is-invalid {
+  animation: tileShakeAnim 0.35s ease-in-out forwards !important;
+}
+
+.mosaic-hex-tile.is-clearing {
+  animation: tileClearAnim 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  z-index: 30;
+}
+
+.mosaic-hex-tile.is-spawning {
+  animation: tileSpawnAnim 420ms cubic-bezier(0.22, 1.2, 0.36, 1) forwards;
+  animation-delay: var(--spawn-delay, 0ms);
+}
+
+/* Keyframe Animations */
+@keyframes tileShakeAnim {
+  0% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes tileClearAnim {
+  0% { transform: scale(1); opacity: 1; }
+  40% { transform: scale(1.2) rotate(4deg); opacity: 0.9; }
+  100% { transform: scale(0.2) rotate(-8deg); opacity: 0; }
+}
+
+/* === FIX: Smooth Cascade Animation === */
+@keyframes tileSpawnAnim {
+  0% {
+    transform: translateY(calc(var(--spawn-distance, 38px) * -1)) scale(0.92);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(2px) scale(1.04);
+    opacity: 1;
+  }
+  75% {
+    transform: translateY(-3px) scale(1.01);
+    opacity: 1;
+  }
+  90% {
+    transform: translateY(1px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes floatScoreAnim {
+  0% { transform: translateY(0) scale(0.8); opacity: 0; }
+  20% { transform: translateY(-12px) scale(1.15); opacity: 1; }
+  80% { transform: translateY(-38px) scale(1); opacity: 0.95; }
+  100% { transform: translateY(-56px) scale(0.9); opacity: 0; }
+}
+
+.animate-score-float {
+  animation: floatScoreAnim 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes comboPulseAnim {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+.animate-combo-pulse {
+  animation: comboPulseAnim 0.4s ease-in-out 2;
+}
+
+/* Subtle Idle Tile Breathing */
+@keyframes tileBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.012); }
+}
+
+.animate-breathe {
+  animation: tileBreathe 3.6s ease-in-out infinite;
+  animation-delay: var(--breathe-delay, 0s);
+}
+
+/* Modal and Panel Entry (stays permanently visible) */
+@keyframes modalEnterAnim {
+  0% { transform: scale(0.96) translateY(4px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.animate-modal-enter {
+  animation: modalEnterAnim 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* === NEW: Phase Badge Animation === */
+@keyframes phaseTransition {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.phase-badge.phase-transition {
+  animation: phaseTransition 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* === NEW: Board flash khi chuyển phase === */
+@keyframes boardPhaseFlash {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(244, 213, 141, 0); }
+  50% { box-shadow: 0 0 0 16px rgba(244, 213, 141, 0.45); }
+}
+
+.board-phase-flash {
+  animation: boardPhaseFlash 0.8s ease-out;
+}
+
+/* === NEW: Loading Scene Animations === */
+@keyframes loadingAmbientPulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.08); }
+}
+
+@keyframes loadingFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.4; }
+  50% { transform: translate(20px, -30px) scale(1.2); opacity: 0.7; }
+}
+
+@keyframes loadingTileFlyIn {
+  0% {
+    transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(0, 0) rotate(0deg) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes loadingLogoReveal {
+  0% { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+  60% { transform: scale(1.15) rotate(3deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes loadingLogoPop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes loadingLetterReveal {
+  0% { transform: translateY(20px) scale(0.8); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* === NEW: Home Scene Animations === */
+@keyframes homeLogoBreath {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.04) rotate(1deg); }
+}
+
+.home-logo-breath {
+  animation: homeLogoBreath 4s ease-in-out infinite;
+}
+
+@keyframes homeButtonEnter {
+  0% { transform: translateY(20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.home-button-enter {
+  animation: homeButtonEnter 0.5s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+@keyframes secretReveal {
+  0% { transform: scale(0.5) rotate(-15deg); opacity: 0; }
+  60% { transform: scale(1.15) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* === NEW: Hint Glow (Square) === */
+.tile-3d-square.is-hint {
+  animation: hintPulse 2.5s ease-in-out infinite !important;
+}
+
+@keyframes hintPulse {
+  0%, 100% {
+    box-shadow:
+      0 5px 0 #BCA892,
+      0 7px 10px rgba(92, 70, 52, 0.18),
+      0 0 0px 0px rgba(244, 213, 141, 0);
+  }
+  50% {
+    box-shadow:
+      0 5px 0 #BCA892,
+      0 7px 10px rgba(92, 70, 52, 0.18),
+      0 0 12px 2px rgba(244, 213, 141, 0.5);
+  }
+}
+
+/* === FIX: Hint Glow (Hex) - Dịu và chậm hơn === */
+.mosaic-hex-tile.is-hint {
+  animation: hintPulseHex 2.5s ease-in-out infinite;
+}
+
+@keyframes hintPulseHex {
+  0%, 100% {
+    filter: drop-shadow(0 0 0px rgba(244, 213, 141, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(244, 213, 141, 0.5));
+  }
+}
+
+/* === NEW: Explosion Burst 3x3 === */
+/* === NEW: Explosion 3x3 Visual - Bùng nổ, có lực === */
+@keyframes explosionFlash {
+  0% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.3); }
+}
+
+@keyframes explosionShockwave {
+  0% { transform: scale(0.2); opacity: 1; border-width: 12px; }
+  100% { transform: scale(1.8); opacity: 0; border-width: 1px; }
+}
+
+@keyframes explosionCore {
+  0% { transform: scale(0.2); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.9; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* Khung chứa vụ nổ */
+.explosion-container {
+  position: absolute;
+  width: 60%; /* Tương đương 3 ô trên lưới 7x7 */
+  height: 60%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* Lõi sáng chói */
+.explosion-core {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(255, 230, 100, 0.9) 20%, rgba(255, 120, 50, 0.6) 50%, transparent 80%);
+  animation: explosionCore 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Vòng xung kích lan rộng */
+.explosion-shockwave {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 8px solid rgba(255, 200, 50, 0.8);
+  animation: explosionShockwave 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Lóe sáng trắng toàn bộ vùng nổ */
+.explosion-flash {
+  position: absolute;
+  inset: 0;
+  background: #FFF;
+  border-radius: 50%;
+  animation: explosionFlash 0.3s ease-out forwards;
+}
+
+/* Hiệu ứng rung màn hình (Screen Shake) */
+@keyframes screenShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px) translateY(2px); }
+  40% { transform: translateX(4px) translateY(-2px); }
+  60% { transform: translateX(-3px) translateY(1px); }
+  80% { transform: translateX(3px) translateY(-1px); }
+}
+
+.board-shake {
+  animation: screenShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* === NEW: Secret Reveal (already used in SecretPasswordCard) === */
+@keyframes secretReveal {
+  0% {
+    transform: scale(0.5) rotate(-15deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15) rotate(5deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+
+/* === NEW: Alphabet Mole Game === */
+@keyframes moleHitFloat {
+  0% { transform: translateY(0) scale(0.8); opacity: 0; }
+  20% { transform: translateY(-10px) scale(1.2); opacity: 1; }
+  80% { transform: translateY(-30px) scale(1); opacity: 1; }
+  100% { transform: translateY(-40px) scale(0.9); opacity: 0; }
+}

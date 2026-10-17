@@ -1,0 +1,6 @@
+{
+  "name": "Word Breach - TOEM Style Indie Word Puzzle",
+  "description": "Tactile cozy word puzzle game with fake 3D tiles, cascade gravity, square/hex boards, combo juice, and deadlock prevention.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
