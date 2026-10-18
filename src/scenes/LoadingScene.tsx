@@ -217,7 +217,7 @@ export function LoadingScene({ onComplete }: LoadingSceneProps) {
             className="text-4xl sm:text-5xl font-black tracking-tight text-[#1A2A3A] flex gap-0.5"
             style={{ opacity: titleVisible ? 1 : 0, transition: 'opacity 0.4s' }}
           >
-            {'WORD BREACH'.split('').map((ch, i) => (
+            {'WORD - LIBRARIA'.split('').map((ch, i) => (
               <span key={i} style={{
                   display: 'inline-block',
                   transform: titleVisible ? 'translateY(0)' : 'translateY(20px)',

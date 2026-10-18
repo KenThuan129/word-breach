@@ -2,6 +2,7 @@
  * useGameEngine — Encapsulates all gameplay logic
  * Extracted from legacy App.tsx.
  * Supports: endless, secret-password modes.
+ * Includes: Tutorial mode, Booster System (Magic Wand, Bomb).
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -14,7 +15,7 @@ import {
     LETTER_POINTS,
 } from './config';
 import { GAME_TRIE } from './dictionary';
-import { areNeighbors, findAvailableWords, shuffleBoard } from './deadlock';
+import { areNeighbors, findAvailableWords, shuffleBoard, findAvailableWordPaths } from './deadlock';
 import { SOUND } from './sound';
 import {
     DifficultyPhase,
@@ -34,6 +35,7 @@ export interface UseGameEngineOptions {
     gridType: GridType;
     onVictory?: (score: number) => void;
     onDefeat?: () => void;
+    isTutorial?: boolean; // Thêm prop này để nhận diện Tutorial
 }
 
 export interface UseGameEngineReturn {
@@ -57,11 +59,15 @@ export interface UseGameEngineReturn {
     wordsClearedCount: number;
     shuffleToast: string | null;
     // Secret Password specific
-    passwordProgress: string[];       // letters unlocked in order
-    passwordTarget: string;           // full password
-    timeLeftSec: number | null;       // null if no timer
+    passwordProgress: string[];
+    passwordTarget: string;
+    timeLeftSec: number | null;
     easyModeUntil: number;
     explosionEffect: { x: number; y: number; key: number } | null;
+    // Booster System
+    bombMode: boolean;
+    setBombMode: (val: boolean) => void;
+    useMagicWand: () => boolean;
     // Handlers
     handlePointerDown: (r: number, c: number, e: React.PointerEvent) => void;
     handlePointerMove: (e: React.PointerEvent) => void;
@@ -70,6 +76,7 @@ export interface UseGameEngineReturn {
     getDragLinePoints: () => string;
     // Refs
     boardRef: React.RefObject<HTMLDivElement | null>;
+    suggestions: string[];
 }
 
 export function useGameEngine({
@@ -78,6 +85,7 @@ export function useGameEngine({
     gridType,
     onVictory,
     onDefeat,
+    isTutorial = false,
 }: UseGameEngineOptions): UseGameEngineReturn {
     // === Grid & Board ===
     const [grid, setGrid] = useState<(TileData | null)[][]>([]);
@@ -112,13 +120,16 @@ export function useGameEngine({
         levelConfig?.timeLimitSec ?? null
     );
 
-    // === NEW: Explosion & Easy Mode ===
+    // === Explosion & Easy Mode ===
     const [easyModeUntil, setEasyModeUntil] = useState<number>(0);
     const [explosionEffect, setExplosionEffect] = useState<{
         x: number;
         y: number;
         key: number;
     } | null>(null);
+
+    // === Booster State ===
+    const [bombMode, setBombMode] = useState<boolean>(false);
 
     // === Secret Password ===
     const passwordTarget = levelConfig?.password ?? '';
@@ -141,10 +152,13 @@ export function useGameEngine({
     const particleAnimFrameRef = useRef<number | null>(null);
     const isBusyRef = useRef<boolean>(false);
 
+    // === Suggestion State ===
+    const [suggestions, setSuggestions] = useState<string[]>([]);
+
     const rows = 7;
     const cols = 7;
 
-    // === NEW: Password helpers ===
+    // === Password helpers ===
     const getPasswordNeededLetters = useCallback((): string[] => {
         if (mode !== 'secret-password' || !passwordTarget) return [];
         const unlockedLetters = new Set(passwordProgress.map((p) => p.split(':')[1]));
@@ -153,12 +167,9 @@ export function useGameEngine({
         );
     }, [mode, passwordTarget, passwordProgress]);
 
-    // === NEW: Smart letter spawn ===
-    // - Guarantee at least 1 password letter on board
-    // - Force phase 1 during easy mode
+    // === Smart letter spawn ===
     const getSmartLetter = useCallback(
         (tempBoard: (TileData | null)[][]): string => {
-            // Secret Password: guarantee needed letter
             if (mode === 'secret-password' && passwordTarget) {
                 const needed = getPasswordNeededLetters();
                 if (needed.length > 0) {
@@ -176,7 +187,6 @@ export function useGameEngine({
                 }
             }
 
-            // Easy mode override (30s)
             const now = Date.now();
             const activePhase = now < easyModeUntil
                 ? (1 as DifficultyPhase)
@@ -203,6 +213,37 @@ export function useGameEngine({
     // === INIT BOARD ===
     const initBoard = useCallback(
         (type: GridType) => {
+            // === TUTORIAL OVERRIDE ===
+            if (isTutorial) {
+                const tutorialGrid = Array(3).fill(null).map((_, r) => 
+                  Array(3).fill(null).map((_, c) => {
+                    let letter = 'X';
+                    if (r === 0 && c === 0) letter = 'C';
+                    if (r === 1 && c === 1) letter = 'A';
+                    if (r === 2 && c === 2) letter = 'T';
+                    
+                    return {
+                      id: `tut-${r}-${c}`,
+                      letter,
+                      r,
+                      c,
+                      points: LETTER_POINTS[letter] || 1,
+                      isNew: false,
+                    };
+                  })
+                );
+                setGrid(tutorialGrid as any);
+                setSelectedPositions([]);
+                setCurrentWord('');
+                setDeadlockCount(0);
+                setGameOver(false);
+                setGameVictory(false);
+                setIsProcessing(false);
+                isBusyRef.current = false;
+                return;
+            }
+            // === KẾT THÚC TUTORIAL OVERRIDE ===
+
             const config = levelConfigRef.current;
             let newGrid: (TileData | null)[][] = [];
             let valid = false;
@@ -214,7 +255,6 @@ export function useGameEngine({
                 if (type === 'square') {
                     for (let r = 0; r < rows; r++) {
                         for (let c = 0; c < cols; c++) {
-                            // Không dùng difficulty spawn lúc init — dùng random đều
                             const letters = 'EEEEEEEAAAAAIIIII OOOOOTTTTTNNNNRRRRSSSSLLLLCCCCUUUUDDDDPPPPMMMMHHHHGGGGBBBBFFFYYYWWWKKKVVVXZZJJQ'.replace(/\s/g, '');
                             const letter = letters[Math.floor(Math.random() * letters.length)];
                             newGrid[r][c] = {
@@ -254,7 +294,6 @@ export function useGameEngine({
                     }
                 }
 
-                // === NEW: Force spawn password letters for secret-password mode ===
                 if (mode === 'secret-password' && passwordTarget) {
                     const needed = Array.from(new Set(passwordTarget.split('')));
                     const allPositions: { r: number; c: number }[] = [];
@@ -265,7 +304,6 @@ export function useGameEngine({
                         }
                     }
 
-                    // Fisher-Yates shuffle positions
                     for (let i = allPositions.length - 1; i > 0; i--) {
                         const j = Math.floor(Math.random() * (i + 1));
                         [allPositions[i], allPositions[j]] = [allPositions[j], allPositions[i]];
@@ -312,11 +350,22 @@ export function useGameEngine({
             setPasswordProgress([]);
             setEasyModeUntil(0);
             setExplosionEffect(null);
+            setBombMode(false); // Reset bomb mode
             if (config?.timeLimitSec !== undefined) {
                 setTimeLeftSec(config.timeLimitSec);
             }
+            // === THÊM ĐOẠN NÀY ĐỂ CÓ SUGGESTION NGAY KHI VÀO GAME ===
+            const paths = findAvailableWordPaths(newGrid, type, 3, 20);
+            paths.sort((a, b) => a.word.length - b.word.length);
+            let picked: string[] = [];
+            if (paths.length > 0) {
+                for (let i = 0; i < paths.length && picked.length < 3; i++) {
+                    if (!picked.includes(paths[i].word)) picked.push(paths[i].word);
+                }
+            }
+            setSuggestions(picked);
         },
-        [levelConfig, mode, passwordTarget]
+        [levelConfig, mode, passwordTarget, isTutorial]
     );
 
     // Init board on mount + on gridType change
@@ -334,6 +383,7 @@ export function useGameEngine({
 
     // === Combo Decay ===
     useEffect(() => {
+        if (isTutorial) return; // Tắt combo trong tutorial
         if (comboTimeLeft > 0) {
             comboIntervalRef.current = window.setInterval(() => {
                 setComboTimeLeft((prev) => {
@@ -351,11 +401,11 @@ export function useGameEngine({
         return () => {
             if (comboIntervalRef.current) clearInterval(comboIntervalRef.current);
         };
-    }, [comboTimeLeft]);
+    }, [comboTimeLeft, isTutorial]);
 
-    // === Game Timer (difficulty + level timer) ===
+    // === Game Timer ===
     useEffect(() => {
-        if (gameOver || gameVictory) return;
+        if (gameOver || gameVictory || isTutorial) return; // Tắt timer trong tutorial
         const timer = setInterval(() => {
             setElapsedSeconds((prev) => prev + 1);
             if (timeLeftSec !== null) {
@@ -372,7 +422,7 @@ export function useGameEngine({
             }
         }, 1000);
         return () => clearInterval(timer);
-    }, [gameOver, gameVictory, timeLeftSec, onDefeat]);
+    }, [gameOver, gameVictory, timeLeftSec, onDefeat, isTutorial]);
 
     // === Reset isNew after spawn animation ===
     useEffect(() => {
@@ -393,7 +443,7 @@ export function useGameEngine({
         return () => clearTimeout(timeout);
     }, [grid]);
 
-    // === NEW: Apply isHint flag based on password progress ===
+    // === Apply isHint flag ===
     useEffect(() => {
         if (mode !== 'secret-password' || !passwordTarget) return;
         const needed = getPasswordNeededLetters();
@@ -463,7 +513,6 @@ export function useGameEngine({
         setParticles((prev) => [...prev, ...newParticles]);
     };
 
-    // === Pointer → Board coords ===
     const getBoardRelativePoint = (clientX: number, clientY: number) => {
         if (!boardRef.current) return { x: 0, y: 0 };
         const rect = boardRef.current.getBoundingClientRect();
@@ -481,9 +530,85 @@ export function useGameEngine({
         return null;
     };
 
+    // === BOOSTER LOGIC ===
+        const useMagicWand = () => {
+        if (isBusyRef.current || gameOver || gameVictory) return false;
+        const availableWords = findAvailableWordPaths(grid, gridType, 3, 10);
+        if (availableWords.length === 0) return false;
+        
+        availableWords.sort((a, b) => b.word.length - a.word.length);
+        const bestWord = availableWords[0];
+
+        isBusyRef.current = true;
+        setIsProcessing(true);
+
+        // Giả lập animation kéo từng chữ cái
+        let currentIndex = 0;
+        
+        const animateStep = () => {
+            if (currentIndex < bestWord.path.length) {
+                const pos = bestWord.path[currentIndex];
+                setSelectedPositions(bestWord.path.slice(0, currentIndex + 1));
+                setCurrentWord(bestWord.word.slice(0, currentIndex + 1));
+                SOUND.playTileSelect(currentIndex + 1);
+                
+                currentIndex++;
+                setTimeout(animateStep, 150); // Tốc độ kéo (150ms/chữ)
+            } else {
+                // Kéo xong -> Đợi 300ms rồi nổ
+                setTimeout(() => {
+                    setSelectedPositions([]);
+                    setCurrentWord('');
+                    handleWordValid(bestWord.word, bestWord.path);
+                }, 300);
+            }
+        };
+        
+        animateStep();
+        return true;
+    };
+
+    const useBomb = (r: number, c: number) => {
+        if (isBusyRef.current || gameOver || gameVictory) return;
+        
+        const positionsToClear: Position[] = [];
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                if (grid[r+dr]?.[c+dc]) {
+                    positionsToClear.push({ r: r+dr, c: c+dc });
+                }
+            }
+        }
+        
+        // Hiệu ứng nổ
+        setExplosionEffect({ x: c, y: r, key: Date.now() });
+        setTimeout(() => setExplosionEffect(null), 800);
+        triggerParticleBurst(230, 230); // Nổ giữa board
+
+        // Gọi logic xóa
+        const newGrid = grid.map((row) => [...row]);
+        positionsToClear.forEach((pos) => {
+            const tile = newGrid[pos.r][pos.c];
+            if (tile) newGrid[pos.r][pos.c] = { ...tile, clearing: true };
+        });
+        setGrid(newGrid);
+        
+        setTimeout(() => {
+            executeCascade(positionsToClear);
+        }, TIMING.CASCADE_DELAY);
+
+        setBombMode(false);
+    };
+
     // === INPUT HANDLERS ===
     const handlePointerDown = (r: number, c: number, e: React.PointerEvent) => {
         if (isBusyRef.current || gameOver || gameVictory) return;
+        
+        if (bombMode) {
+            useBomb(r, c);
+            return;
+        }
+
         const tile = grid[r]?.[c];
         if (!tile) return;
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -495,7 +620,7 @@ export function useGameEngine({
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
-        if (!isDragging || isBusyRef.current || gameOver || gameVictory) return;
+        if (!isDragging || isBusyRef.current || gameOver || gameVictory || bombMode) return;
         setPointerPos(getBoardRelativePoint(e.clientX, e.clientY));
         const target = getTileAtPoint(e.clientX, e.clientY);
         if (!target) return;
@@ -504,7 +629,6 @@ export function useGameEngine({
         if (!lastPos) return;
         if (lastPos.r === r && lastPos.c === c) return;
 
-        // Backtrack
         if (selectedPositions.length > 1) {
             const secondToLast = selectedPositions[selectedPositions.length - 2];
             if (secondToLast.r === r && secondToLast.c === c) {
@@ -546,219 +670,6 @@ export function useGameEngine({
         } else {
             handleWordInvalid(selectedPositions);
         }
-    };
-
-    // === NEW: Compute 3x3 explosion positions ===
-    const computeExplosionPositions = (excludeWordPositions: Position[]): Position[] => {
-        const excludeSet = new Set(excludeWordPositions.map((p) => `${p.r},${p.c}`));
-        const explosion: Position[] = [];
-
-        if (gridType === 'square') {
-            // Center of 7x7 grid = (3, 3). 3x3 = rows 2-4, cols 2-4.
-            const centerR = Math.floor(rows / 2);
-            const centerC = Math.floor(cols / 2);
-            for (let dr = -1; dr <= 1; dr++) {
-                for (let dc = -1; dc <= 1; dc++) {
-                    const r = centerR + dr;
-                    const c = centerC + dc;
-                    if (
-                        r >= 0 &&
-                        r < rows &&
-                        c >= 0 &&
-                        c < cols &&
-                        grid[r]?.[c] &&
-                        !excludeSet.has(`${r},${c}`)
-                    ) {
-                        explosion.push({ r, c });
-                    }
-                }
-            }
-        } else {
-            // Hex grid: use Euclidean distance fallback from board center
-            // Center tile at axial (0, 0) — find closest 9 tiles by distance
-            const candidates: { pos: Position; dist: number }[] = [];
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    if (!grid[r]?.[c]) continue;
-                    if (excludeSet.has(`${r},${c}`)) continue;
-                    const axialQ = c - CONFIG.hexRadius;
-                    const axialR = r - CONFIG.hexRadius;
-                    const dist = Math.sqrt(axialQ * axialQ + axialQ * axialR + axialR * axialR);
-                    candidates.push({ pos: { r, c }, dist });
-                }
-            }
-            candidates.sort((a, b) => a.dist - b.dist);
-            for (let i = 0; i < Math.min(9, candidates.length); i++) {
-                explosion.push(candidates[i].pos);
-            }
-        }
-
-        return explosion;
-    };
-
-    // === VALID WORD ===
-    const handleWordValid = (word: string, positions: Position[]) => {
-        isBusyRef.current = true;
-        setIsProcessing(true);
-
-        const lengthMult = getLengthMultiplier(word.length);
-        const comboMult = getComboMultiplier(combo);
-        const wordScore = Math.round(CONFIG.baseWordScore * lengthMult * comboMult);
-
-        if (combo >= 4) SOUND.playComboMax();
-        else SOUND.playWordValid(word.length, combo);
-
-        const nextCombo = Math.min(combo + 1, 5);
-        setCombo(nextCombo);
-        setComboTimeLeft(comboWindowMs);
-        setScore((prev) => prev + wordScore);
-
-        // === DDA tracking ===
-        const now = Date.now();
-        const newHistory = [...clearedHistory, { timestamp: now, word, length: word.length }]
-            .filter((h) => now - h.timestamp <= 60000);
-        const newWordsCleared = wordsClearedCount + 1;
-        setClearedHistory(newHistory);
-        setWordsClearedCount(newWordsCleared);
-
-        const newDDA = calculateDDA(
-            elapsedSeconds,
-            newWordsCleared,
-            newHistory,
-            deadlockCount,
-            lastDeadlockSoftenedUntil,
-            now
-        );
-        setDdaState(newDDA);
-
-        if (newDDA.effectivePhase !== difficultyPhase) {
-            setDifficultyPhase(newDDA.effectivePhase);
-            setComboWindowMs(PHASE_CONFIGS[newDDA.effectivePhase].comboWindowMs);
-            SOUND.playPhaseTransition();
-        }
-
-        // === Secret Password progress ===
-                // === Secret Password progress (NEW LOGIC) ===
-        if (mode === 'secret-password' && passwordTarget) {
-            const upperWord = word.toUpperCase();
-            const newProgress = [...passwordProgress];
-            const newlyUnlockedLetters = new Set<string>();
-
-            passwordTarget.split('').forEach((letter, idx) => {
-                const key = `${idx}:${letter}`;
-                if (!newProgress.includes(key) && upperWord.includes(letter)) {
-                    newProgress.push(key);
-                    newlyUnlockedLetters.add(letter);
-                }
-            });
-
-            // === NEW: Trigger explosion + easy mode (chỉ 1 lần dù unlock nhiều chữ) ===
-            if (newlyUnlockedLetters.size > 0 && !gameVictory) {
-                const explosionPositions = computeExplosionPositions(positions);
-                if (explosionPositions.length > 0) {
-                    // Visual effect
-                    const centerR = Math.floor(rows / 2);
-                    const centerC = Math.floor(cols / 2);
-                    setExplosionEffect({ x: centerC, y: centerR, key: Date.now() });
-                    setTimeout(() => setExplosionEffect(null), 800);
-                    
-                    // NEW: Bắn mảnh vỡ (particles) ở tâm vụ nổ
-                    if (boardRef.current) {
-                        const rect = boardRef.current.getBoundingClientRect();
-                        const centerX = rect.width / 2;
-                        const centerY = rect.height / 2;
-                        
-                        // Bắn 2 lớp particle để nhìn cho "dày" (cách nhau 150ms)
-                        triggerParticleBurst(centerX, centerY);
-                        setTimeout(() => triggerParticleBurst(centerX, centerY), 150);
-                    }
-
-                    // Mark exploded tiles
-                    const explodedGrid = grid.map((row) => [...row]);
-                    explosionPositions.forEach((pos) => {
-                        const t = explodedGrid[pos.r][pos.c];
-                        if (t) explodedGrid[pos.r][pos.c] = { ...t, clearing: true };
-                    });
-                    setGrid(explodedGrid);
-
-                    // Trigger cascade for exploded tiles after short delay
-                    setTimeout(() => {
-                        executeCascade(explosionPositions);
-                    }, 200);
-                }
-
-                // Easy mode for 30s
-                setEasyModeUntil(Date.now() + 30000);
-            }
-
-            // Check victory
-            if (newProgress.length >= passwordTarget.length && !gameVictory) {
-                setPasswordProgress(newProgress);
-                setGameVictory(true);
-                isBusyRef.current = false;
-                setIsProcessing(false);
-                SOUND.playPhaseTransition();
-                if (onVictory) setTimeout(() => onVictory(score + wordScore), 800);
-                return;
-            }
-
-            setPasswordProgress(newProgress);
-        }
-
-        // === Score popup + particles ===
-        if (boardRef.current) {
-            let sumX = 0;
-            let sumY = 0;
-            positions.forEach((pos) => {
-                const tileElem = boardRef.current?.querySelector(
-                    `[data-tile-r="${pos.r}"][data-tile-c="${pos.c}"]`
-                );
-                if (tileElem) {
-                    const rect = tileElem.getBoundingClientRect();
-                    const boardRect = boardRef.current!.getBoundingClientRect();
-                    sumX += rect.left + rect.width / 2 - boardRect.left;
-                    sumY += rect.top + rect.height / 2 - boardRect.top;
-                }
-            });
-            const centerX = sumX / positions.length;
-            const centerY = sumY / positions.length;
-
-            const newPopup: ScorePopup = {
-                id: `popup-${Date.now()}`,
-                x: centerX,
-                y: centerY,
-                score: wordScore,
-                word,
-                combo: nextCombo,
-            };
-            setScorePopups((prev) => [...prev, newPopup]);
-            setTimeout(() => {
-                setScorePopups((prev) => prev.filter((p) => p.id !== newPopup.id));
-            }, 900);
-            triggerParticleBurst(centerX, centerY);
-        }
-
-        // === Mark tiles clearing ===
-        const newGrid = grid.map((row) => [...row]);
-        positions.forEach((pos) => {
-            const tile = newGrid[pos.r][pos.c];
-            if (tile) newGrid[pos.r][pos.c] = { ...tile, clearing: true };
-        });
-        setGrid(newGrid);
-
-        setTimeout(() => {
-            executeCascade(positions);
-        }, TIMING.CASCADE_DELAY);
-    };
-
-    const handleWordInvalid = (positions: Position[]) => {
-        SOUND.playInvalid();
-        setInvalidPositions([...positions]);
-        setTimeout(() => {
-            setInvalidPositions([]);
-            setSelectedPositions([]);
-            setCurrentWord('');
-        }, 350);
     };
 
     // === CASCADE ===
@@ -863,10 +774,11 @@ export function useGameEngine({
     };
 
     const checkDeadlockAndFinalize = (board: (TileData | null)[][]) => {
+        if (isTutorial) return; // Không check deadlock trong tutorial
+        
         const available = findAvailableWords(board, gridType, CONFIG.minWordLength, 5);
         setAvailableWordsCount(available.length);
 
-        // === FIX: Recompute activePhase (easy mode override) ===
         const now = Date.now();
         const activePhase: DifficultyPhase =
             now < easyModeUntil
@@ -899,9 +811,168 @@ export function useGameEngine({
             }, 900);
         } else {
             setDeadlockCount(0);
+
+            // === CẬP NHẬT SUGGESTIONS ===
+            const paths = findAvailableWordPaths(board, gridType, 3, 20);
+            // Lấy ngẫu nhiên 3 từ ngắn nhất
+            paths.sort((a, b) => a.word.length - b.word.length);
+            let picked: string[] = [];
+            if (paths.length > 0) {
+                // Cứ 5 lần (dựa vào wordsClearedCount) thì nhét 1 từ hiếm (dài > 3)
+                const isRareTurn = wordsClearedCount > 0 && wordsClearedCount % 5 === 0;
+                const rareWords = paths.filter(p => p.word.length > 3);
+                
+                if (isRareTurn && rareWords.length > 0) {
+                    picked.push(rareWords[0].word);
+                }
+                
+                // Lấp đầy 3 slot còn lại bằng từ ngắn
+                for (let i = 0; i < paths.length && picked.length < 3; i++) {
+                    if (!picked.includes(paths[i].word)) picked.push(paths[i].word);
+                }
+            }
+            setSuggestions(picked);
             isBusyRef.current = false;
             setIsProcessing(false);
         }
+    };
+
+    // === VALID WORD & PASSWORD LOGIC ===
+    const handleWordValid = (word: string, positions: Position[]) => {
+        isBusyRef.current = true;
+        setIsProcessing(true);
+
+        const lengthMult = getLengthMultiplier(word.length);
+        const comboMult = getComboMultiplier(combo);
+        const wordScore = Math.round(CONFIG.baseWordScore * lengthMult * comboMult);
+
+        if (combo >= 4) SOUND.playComboMax();
+        else SOUND.playWordValid(word.length, combo);
+
+        const nextCombo = Math.min(combo + 1, 5);
+        setCombo(nextCombo);
+        setComboTimeLeft(comboWindowMs);
+        setScore((prev) => prev + wordScore);
+
+        const now = Date.now();
+        const newHistory = [...clearedHistory, { timestamp: now, word, length: word.length }]
+            .filter((h) => now - h.timestamp <= 60000);
+        const newWordsCleared = wordsClearedCount + 1;
+        setClearedHistory(newHistory);
+        setWordsClearedCount(newWordsCleared);
+
+        const newDDA = calculateDDA(
+            elapsedSeconds,
+            newWordsCleared,
+            newHistory,
+            deadlockCount,
+            lastDeadlockSoftenedUntil,
+            now
+        );
+        setDdaState(newDDA);
+
+        if (newDDA.effectivePhase !== difficultyPhase) {
+            setDifficultyPhase(newDDA.effectivePhase);
+            setComboWindowMs(PHASE_CONFIGS[newDDA.effectivePhase].comboWindowMs);
+            SOUND.playPhaseTransition();
+        }
+
+        if (mode === 'secret-password' && passwordTarget) {
+            const upperWord = word.toUpperCase();
+            const newProgress = [...passwordProgress];
+            const newlyUnlockedLetters = new Set<string>();
+
+            passwordTarget.split('').forEach((letter, idx) => {
+                const key = `${idx}:${letter}`;
+                if (!newProgress.includes(key) && upperWord.includes(letter)) {
+                    newProgress.push(key);
+                    newlyUnlockedLetters.add(letter);
+                }
+            });
+
+            if (newlyUnlockedLetters.size > 0 && !gameVictory) {
+                const centerR = Math.floor(rows / 2);
+                const centerC = Math.floor(cols / 2);
+                setExplosionEffect({ x: centerC, y: centerR, key: Date.now() });
+                setTimeout(() => setExplosionEffect(null), 800);
+                
+                if (boardRef.current) {
+                    const rect = boardRef.current.getBoundingClientRect();
+                    const centerX = rect.width / 2;
+                    const centerY = rect.height / 2;
+                    triggerParticleBurst(centerX, centerY);
+                    setTimeout(() => triggerParticleBurst(centerX, centerY), 150);
+                }
+
+                setEasyModeUntil(Date.now() + 30000);
+                SOUND.playComboMax();
+            }
+
+            if (newProgress.length >= passwordTarget.length && !gameVictory) {
+                setPasswordProgress(newProgress);
+                setGameVictory(true);
+                isBusyRef.current = false;
+                setIsProcessing(false);
+                SOUND.playPhaseTransition();
+                if (onVictory) setTimeout(() => onVictory(score + wordScore), 800);
+                return;
+            }
+
+            setPasswordProgress(newProgress);
+        }
+
+        if (boardRef.current) {
+            let sumX = 0;
+            let sumY = 0;
+            positions.forEach((pos) => {
+                const tileElem = boardRef.current?.querySelector(
+                    `[data-tile-r="${pos.r}"][data-tile-c="${pos.c}"]`
+                );
+                if (tileElem) {
+                    const rect = tileElem.getBoundingClientRect();
+                    const boardRect = boardRef.current!.getBoundingClientRect();
+                    sumX += rect.left + rect.width / 2 - boardRect.left;
+                    sumY += rect.top + rect.height / 2 - boardRect.top;
+                }
+            });
+            const centerX = sumX / positions.length;
+            const centerY = sumY / positions.length;
+
+            const newPopup: ScorePopup = {
+                id: `popup-${Date.now()}`,
+                x: centerX,
+                y: centerY,
+                score: wordScore,
+                word,
+                combo: nextCombo,
+            };
+            setScorePopups((prev) => [...prev, newPopup]);
+            setTimeout(() => {
+                setScorePopups((prev) => prev.filter((p) => p.id !== newPopup.id));
+            }, 900);
+            triggerParticleBurst(centerX, centerY);
+        }
+
+        const newGrid = grid.map((row) => [...row]);
+        positions.forEach((pos) => {
+            const tile = newGrid[pos.r][pos.c];
+            if (tile) newGrid[pos.r][pos.c] = { ...tile, clearing: true };
+        });
+        setGrid(newGrid);
+
+        setTimeout(() => {
+            executeCascade(positions);
+        }, TIMING.CASCADE_DELAY);
+    };
+
+    const handleWordInvalid = (positions: Position[]) => {
+        SOUND.playInvalid();
+        setInvalidPositions([...positions]);
+        setTimeout(() => {
+            setInvalidPositions([]);
+            setSelectedPositions([]);
+            setCurrentWord('');
+        }, 350);
     };
 
     const handleRestart = () => {
@@ -914,7 +985,6 @@ export function useGameEngine({
         initBoard(gridType);
     };
 
-    // === Drag line ===
     const getDragLinePoints = () => {
         if (!boardRef.current || selectedPositions.length === 0) return '';
         const boardRect = boardRef.current.getBoundingClientRect();
@@ -961,11 +1031,15 @@ export function useGameEngine({
         timeLeftSec,
         easyModeUntil,
         explosionEffect,
+        bombMode,
+        setBombMode,
+        useMagicWand,
         handlePointerDown,
         handlePointerMove,
         handlePointerUp,
         handleRestart,
         getDragLinePoints,
         boardRef,
+        suggestions,
     };
 }

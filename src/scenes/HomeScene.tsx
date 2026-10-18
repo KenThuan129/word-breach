@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Play, Infinity as InfinityIcon, Settings as SettingsIcon } from 'lucide-react';
+import { SettingsModal } from '../components/SettingsModal';
 
 interface HomeSceneProps {
   onPlayStandard: () => void;
@@ -8,6 +9,8 @@ interface HomeSceneProps {
 }
 
 export function HomeScene({ onPlayStandard, onPlayEndless, onPlayMinigame }: HomeSceneProps) {
+  const [showSettings, setShowSettings] = useState(false);
+  
   return (
     <div className="fixed inset-0 bg-paper-texture overflow-auto flex flex-col items-center justify-center p-6">
       {/* Ambient background decoration */}
@@ -21,7 +24,7 @@ export function HomeScene({ onPlayStandard, onPlayEndless, onPlayMinigame }: Hom
 
       {/* Settings button — top right */}
       <button
-        onClick={() => alert('Settings — Coming soon!')}
+        onClick={() => setShowSettings(true)}
         className="absolute top-5 right-5 p-2.5 rounded-xl bg-[#EADFC9] border-2 border-[#8B6F5C] shadow-[0_3px_0_#8B6F5C] hover:bg-[#F4D58D] transition-colors text-[#1A2A3A] active:translate-y-0.5 active:shadow-[0_1px_0_#8B6F5C] z-20"
         aria-label="Settings"
       >
@@ -44,7 +47,7 @@ export function HomeScene({ onPlayStandard, onPlayEndless, onPlayMinigame }: Hom
           </div>
           <div className="text-center">
             <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-[#1A2A3A] leading-none">
-              WORD BREACH
+              WORD - LIBRARIA
             </h1>
             <p className="text-sm sm:text-base text-[#8B6F5C] font-medium mt-2">
               Cozy Indie Word Puzzle
@@ -132,6 +135,8 @@ export function HomeScene({ onPlayStandard, onPlayEndless, onPlayMinigame }: Hom
           v0.1 · Prototype Build
         </p>
       </div>
+
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
